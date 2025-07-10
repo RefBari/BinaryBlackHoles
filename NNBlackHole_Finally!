@@ -13,7 +13,7 @@ using Random
 
 include("/Users/rbari/Downloads/common_denominator-2020_scimlforbbhs-e19e6808aad2/paper/zenodo/GWaveInversion/SchwarzschildTrainingData")
 
-losses = []
+# losses = []
 partition_boundaries = []
 final_paramaters = []
 solutions_list = []
