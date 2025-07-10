@@ -1,0 +1,349 @@
+using Plots
+using DifferentialEquations
+using LaTeXStrings
+using Optimization, OptimizationOptimJL
+using Optimisers
+using OptimizationOptimisers
+using Printf
+using Plots.Measures
+using SymbolicRegression
+using MLJ
+
+include("/Users/rbari/Downloads/common_denominator-2020_scimlforbbhs-e19e6808aad2/paper/zenodo/GWaveInversion/SchwarzschildTrainingData")
+
+losses = []
+partition_boundaries = []
+final_paramaters = []
+solutions_list = []
+parameters_list = []
+final_predicted_h_plus = []
+training_h_plus_wave = []
+symbolic_results = []
+
+function runSymbolicRegression(time_points, waveform_data, orbital_params; niterations=50)
+    println("\n=== Running Symbolic Regression ===")
+    println("Discovering symbolic equation for gravitational waveform...")
+    println("Input data: $(length(time_points)) time points")
+    println("Orbital parameters: p=$(round(orbital_params[1], digits=3)), e=$(round(orbital_params[2], digits=3))")
+    
+    # Prepare data for symbolic regression
+    # Use time, orbital parameters, and derived quantities as features
+    X = (
+        t = time_points,
+        p = fill(orbital_params[1], length(time_points)),
+        e = fill(orbital_params[2], length(time_points)),
+        t_squared = time_points.^2,
+        t_cubed = time_points.^3
+    )
+    y = waveform_data
+    
+    # Configure complexity mapping for operators
+    complexity_map = Dict(
+        (+) => 1, (*) => 1, (-) => 1, 
+        (/) => 2, (^) => 3, 
+        sin => 4, cos => 4, 
+        exp => 5, log => 5, 
+        sqrt => 3, abs => 2
+    )
+    
+    # Configure symbolic regression model
+    model = SRRegressor(
+        niterations=niterations,
+        binary_operators=[+, -, *, /, ^],
+        unary_operators=[sin, cos, exp, log, sqrt, abs],
+        complexity_of_operators=complexity_map,
+        complexity_of_constants=1,
+        complexity_of_variables=1,
+        populations=15,
+        population_size=50,
+        maxsize=25,
+        timeout_in_seconds=60.0,
+        parsimony=0.01,
+        alpha=0.1,
+        maxdepth=8,
+        fast_cycle=false
+    )
+    
+    # Fit the model
+    mach = machine(model, X, y)
+    fit!(mach)
+    
+    # Get results
+    rep = report(mach)
+    predictions = predict(mach, X)
+    
+    # Calculate fit quality
+    mse = sum((y .- predictions).^2) / length(y)
+    r_squared = 1 - sum((y .- predictions).^2) / sum((y .- mean(y)).^2)
+    
+    println("Symbolic regression completed!")
+    println("Best equation complexity: $(rep.best_idx)")
+    println("MSE: $(round(mse, digits=8))")
+    println("R²: $(round(r_squared, digits=4))")
+    
+    if haskey(rep, :equations) && length(rep.equations) > 0
+        println("Best equation: $(rep.equations[rep.best_idx])")
+    end
+    
+    return mach, rep, predictions, mse, r_squared
+end
+
+function plotSymbolicResults(time_points, true_waveform, predicted_waveform, symbolic_predictions, orbital_params, mse, r_squared)
+    p = plot(time_points, true_waveform, label="True h+", linewidth=2, color="blue",
+             xlabel="Time (s)", ylabel="h+ Amplitude", 
+             title="Symbolic Regression Results\np=$(round(orbital_params[1], digits=2)), e=$(round(orbital_params[2], digits=2))",
+             legend=:topright, grid=true, 
+             top_margin=10mm, bottom_margin=10mm, left_margin=10mm, right_margin=10mm)
+    
+    plot!(time_points, predicted_waveform, label="Numerical Prediction", 
+          linewidth=2, color="red", linestyle=:dash, alpha=0.7)
+    
+    plot!(time_points, symbolic_predictions, label="Symbolic Equation", 
+          linewidth=2, color="green", linestyle=:dot, alpha=0.8)
+    
+    annotate!([(time_points[end]*0.7, maximum(true_waveform)*0.8, 
+               Plots.text("MSE: $(round(mse, digits=6))\nR²: $(round(r_squared, digits=4))", 
+                         10, :left))])
+    
+    display(p)
+    return p
+end
+
+function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, totalTrainingPercent, 
+                          true_parameters, initial_guess, run_symbolic_regression=true, 
+                          symbolic_iterations=50, symbolic_subsample=100)
+    
+    p_guess = pe_2_EL(initial_guess[1], initial_guess[2])
+    println("Using pe_2_EL, we find [M, E, L] is ", p_guess)
+    trainingFraction = totalTrainingPercent
+    
+    true_p = true_parameters[1]
+    true_e = true_parameters[2]
+
+    trainingData = create_Schwarzschild_trainingData([true_p, true_e])
+
+    timestep = 1
+    true_problem = trainingData[1]
+    true_solution = trainingData[2]
+
+    function loss(pn, trainingFraction)
+        newprob = remake(true_problem, p = pn)
+        sol = solve(newprob, Tsit5(), saveat=timestep)
+        
+        predicted_waveform_plus = compute_waveform(timestep, sol, 1.0)[1]
+        predicted_waveform_cross = compute_waveform(timestep, sol, 1.0)[2]
+        
+        h_plus_training = trainingData[3]
+        h_cross_training = trainingData[4]
+
+        # Compare only the overlapping portion
+        n_train = Int(floor(length(h_plus_training)*trainingFraction))
+        n_pred = length(predicted_waveform_plus)
+        n_compare = min(n_pred, n_train)
+        
+        loss_value = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
+        loss_value += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
+        loss_value /= n_compare
+        println("Training with fraction: ", trainingFraction, ", n_compare: ", n_compare, ", loss: ", loss_value)
+        return loss_value
+    end
+    
+    function callback(pn, loss; dotrain = true)
+        if dotrain
+            push!(losses, loss);
+            @printf("Epoch: %d, Loss: %15.12f \n",length(losses),loss);
+            p = plot(losses, label = "Loss", xlabel = "Epochs", ylabel = "Loss", 
+                    top_margin = 10mm, bottom_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
+            vline!(partition_boundaries, label = "Partition")
+            display(p)
+        end
+        return false
+    end
+
+    # define Optimization Problem
+    adtype = Optimization.AutoFiniteDiff()
+    optf = Optimization.OptimizationFunction((x, p) -> loss(x, trainingFraction), adtype)
+    
+    # create Optimization Problem (function + initial guess for parameters)
+    optprob = Optimization.OptimizationProblem(optf, p_guess)
+
+    # choose method for solving problem 
+    lr = learningRate;
+
+    # solve the problem
+    num_iters = epochsPerIteration;
+    opt_result = Optimization.solve(optprob, Optim.BFGS(; initial_stepnorm = lr), callback=callback, maxiters=num_iters)
+    p_final = opt_result.u
+
+    newprob = remake(true_problem, p = p_final)
+    sol = solve(newprob, Tsit5(), saveat=timestep)
+    push!(solutions_list, sol)
+
+    h_plus_pred = compute_waveform(timestep, sol, 1.0)[1]
+    h_cross_pred = compute_waveform(timestep, sol, 1.0)[2]
+
+    # Handle all cases properly
+    h_plus_training = trainingData[3]
+    h_cross_training = trainingData[4]
+
+    n_pred = length(h_plus_pred)
+    n_train = length(h_plus_training)
+
+    if n_pred == n_train
+        h_plus_pred_plot = h_plus_pred
+    elseif n_pred < n_train
+        h_plus_pred_plot = [h_plus_pred; zeros(n_train - n_pred)]
+    else
+        h_plus_pred_plot = h_plus_pred[1:n_train]
+    end
+
+    t_plot = (0:n_train-1) * timestep
+
+    p = plot(t_plot, h_plus_training, label="h+ true", linewidth=2,
+        xlabel="Time (s)", ylabel="h+ Amplitude",
+        legend=:topright, grid=true, top_margin = 10mm, bottom_margin = 10mm, 
+        left_margin = 10mm, right_margin = 10mm)
+    plot!(t_plot, h_plus_pred_plot, label="h+ predicted", linewidth=2)
+    display(p)
+
+    function partitionTraining(numCycles, totalTrainingFraction)
+        global partition_boundaries, losses, final_paramaters, solutions_list, parameters_list
+        
+        amountTrain = totalTrainingFraction / numCycles
+        p_final_array = [p_final]
+    
+        for i in 1:numCycles
+            trainingFraction = i * amountTrain
+            push!(partition_boundaries, length(losses))
+            push!(final_paramaters, p_final_array[end])
+            optf = Optimization.OptimizationFunction((x, p) -> loss(x, trainingFraction), adtype)
+            optprob = Optimization.OptimizationProblem(optf, p_final_array[end])
+            opt_result_2 = Optimization.solve(optprob, Optim.BFGS(; initial_stepnorm = lr), callback=callback, maxiters=num_iters)
+    
+            p_final_2 = opt_result_2.u
+            push!(p_final_array, p_final_2)
+            newprob_2 = remake(true_problem, p = p_final_2)
+            sol_2 = solve(newprob_2, Tsit5(), saveat=timestep)
+            push!(solutions_list, sol_2)
+            push!(parameters_list, getParameters(sol_2))
+    
+            h_plus_pred = compute_waveform(timestep, sol_2, 1.0)[1]
+            h_cross_pred = compute_waveform(timestep, sol_2, 1.0)[2]
+    
+            # Handle all cases properly
+            n_pred = length(h_plus_pred)
+            n_train = length(h_plus_training)
+    
+            if n_pred == n_train
+                h_plus_pred_plot = h_plus_pred
+            elseif n_pred < n_train
+                h_plus_pred_plot = [h_plus_pred; zeros(n_train - n_pred)]
+            else
+                h_plus_pred_plot = h_plus_pred[1:n_train]
+            end
+            
+            t_plot = (0:n_train-1) * timestep
+    
+            p = plot(t_plot, h_plus_training, color = "lightsalmon", label="h+ true", linewidth=2,
+                    xlabel="Time (s)", ylabel="h+ Amplitude",
+                    legend=:topright, grid=true, bottom_margin = 10mm, top_margin = 10mm, 
+                    left_margin = 10mm, right_margin = 10mm)
+            plot!(t_plot, h_plus_pred_plot, label="h+ predicted",
+                    markershape=:circle, markeralpha = 0.20,
+                    linewidth = 2, alpha = 0.25, linestyle=:dash)
+            display(p)
+            
+            # Run symbolic regression for this cycle if requested
+            if run_symbolic_regression && i == numCycles  # Only on final cycle to save time
+                println("\n=== Running Symbolic Regression for Final Cycle ===")
+                
+                # Subsample data for faster symbolic regression
+                n_subsample = min(symbolic_subsample, length(t_plot))
+                indices = round.(Int, range(1, length(t_plot), length=n_subsample))
+                
+                t_sub = t_plot[indices]
+                h_train_sub = h_plus_training[indices]
+                h_pred_sub = h_plus_pred_plot[indices]
+                
+                # Get orbital parameters
+                final_orbital_params = parameters_list[end]
+                
+                try
+                    # Run symbolic regression on the true training data
+                    mach_true, rep_true, pred_true, mse_true, r2_true = runSymbolicRegression(
+                        t_sub, h_train_sub, final_orbital_params; niterations=symbolic_iterations)
+                    
+                    # Store results
+                    push!(symbolic_results, (
+                        type="true_data",
+                        machine=mach_true,
+                        report=rep_true,
+                        predictions=pred_true,
+                        mse=mse_true,
+                        r_squared=r2_true,
+                        orbital_params=final_orbital_params
+                    ))
+                    
+                    # Plot results
+                    plotSymbolicResults(t_sub, h_train_sub, h_pred_sub, pred_true, final_orbital_params, mse_true, r2_true)
+                    
+                    println("\nSymbolic regression equation for TRUE training data:")
+                    if haskey(rep_true, :equations) && length(rep_true.equations) > 0
+                        println("$(rep_true.equations[rep_true.best_idx])")
+                    end
+                    
+                catch e
+                    println("Symbolic regression failed: ", e)
+                end
+            end
+            
+            push!(final_predicted_h_plus, h_plus_pred_plot)
+            push!(training_h_plus_wave, h_plus_training)
+        end
+    end    
+
+    numCycles = numberOfCycles
+    partitionTraining(numCycles, trainingFraction)
+
+    # Plot parameter evolution
+    x = range(6, 12, length=20)
+    y = (x .- 6) ./ 2
+    p = plot(x, y, ylims=(-0.1, 1), xlims = (6, 12), linewidth = 3, 
+             bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm, 
+             label = "Separatrix", xlabel = "p (Semi-latus Rectum)", ylabel = "e (Eccentricity)", 
+             legend=:bottomright)
+    scatter!([getParameters(true_solution)[1]], [getParameters(true_solution)[2]], 
+             color = "lightsalmon", markersize = 5, label = "True Parameters")
+    
+    for i in 1:numCycles
+        scatter!([parameters_list[i][1]], [parameters_list[i][2]], 
+                 color = "darkseagreen1", markersize = 3, legend = false)
+    end
+    
+    display(p)
+
+    # Return results including symbolic regression
+    parameter_error = (parameters_list[end][1] - getParameters(true_solution)[1])^2 + 
+                     (parameters_list[end][2] - getParameters(true_solution)[2])^2
+    
+    return (
+        parameter_error=parameter_error,
+        final_parameters=parameters_list[end],
+        symbolic_results=symbolic_results,
+        solutions=solutions_list,
+        losses=losses
+    )
+end
+
+# Example usage with symbolic regression
+result = optimizeBlackHole(
+    learningRate = 1e-3, 
+    epochsPerIteration = 3, 
+    numberOfCycles = 2, 
+    totalTrainingPercent = 0.1, 
+    true_parameters = [10, 0.1], 
+    initial_guess = [10.2, 0.2],
+    run_symbolic_regression = true,
+    symbolic_iterations = 30,  # Number of symbolic regression iterations
+    symbolic_subsample = 50    # Subsample data points for faster SR
+)
