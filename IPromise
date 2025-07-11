@@ -26,14 +26,16 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     true_p = true_parameters[1] # True semi-latus rectum
     true_e = true_parameters[2] # True eccentricity
 
-    trainingData = create_Schwarzschild_trainingData([true_p, true_e])
+    # This trainingData returns [prob, true_sol, h_plus_training, h_cross_training]
+    trainingData = create_Schwarzschild_trainingData([true_p, true_e]) # Generate Training Data (Gravitational Waveforms)
 
     timestep = 1
-    true_problem = trainingData[1]
-    true_solution = trainingData[2]
 
-    # Create the neural network that will learn corrections to the flat space equations of motion and learn the geodesic equations of motion
-    NN = Chain(Dense(8, 4,tanh),
+    true_problem = trainingData[1] # True Problem (based on true_parameters input)
+    true_solution = trainingData[2] # True Solution
+
+    # Create Neural Network which learns Geodesic Equations of Motion
+    NN = Chain(Dense(8, 4, tanh),
             Dense(4, 4, tanh),
             Dense(4, 3))
     rng = MersenneTwister(222)
@@ -49,9 +51,11 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         end
     end
 
+    # What will the neural network learn? The following parameters: M, E, L, NN_param
     θ = (; M = p_guess[1], E = p_guess[2], L = p_guess[3], NN = NN_params)
     θ = ComponentVector{precision}(θ);
 
+    # Defines the Neural Network as a correction to the Kepler Equations of Motion
     function SchwarzschildNN(du, u, p, t)
         coord_time, r, θ, ϕ, p_t, p_r, p_θ, p_ϕ = u
         M = p.M
@@ -72,6 +76,13 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         du[8] = dp_ϕ = 0
     end
 
+    # Initial State Vector for Particle orbiting Schwarzschild BH
+    u0 = [0, R, pi/2, 0, -1*E, BH_Kick, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
+    
+    tspan = (0.0, 2000.0)
+    t = 0:timestep:2000.0
+
+    # Define the ODE Problem using the Neural Network
     prob_learn = ODEProblem(SchwarzschildNN, u0, tspan, θ)
 
     function loss(pn, trainingFraction)
