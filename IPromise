@@ -6,6 +6,9 @@ using Optimisers
 using OptimizationOptimisers
 using Printf
 using Plots.Measures
+using Lux
+using ComponentArrays
+using Random
 
 include("/Users/rbari/Downloads/common_denominator-2020_scimlforbbhs-e19e6808aad2/paper/zenodo/GWaveInversion/SchwarzschildTrainingData")
 
@@ -75,6 +78,11 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         du[7] = dp_θ = 0
         du[8] = dp_ϕ = 0
     end
+
+    R = initial_guess[1]/(1+initial_guess[2])
+    E = p_guess[2]
+    L = p_guess[3]
+    BH_Kick = 0
 
     # Initial State Vector for Particle orbiting Schwarzschild BH
     u0 = [0, R, pi/2, 0, -1*E, BH_Kick, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
@@ -189,7 +197,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     
             θ_init_2 = opt_result_2.u;
             # push!(p_final_array, p_final_2)
-            newprob_2 = remake(true_problem, p = θ_init_2)
+            newprob_2 = remake(prob_learn, p = θ_init_2)
             sol_2 = solve(newprob_2, Tsit5(), saveat=timestep)
             push!(solutions_list, sol_2)
             push!(parameters_list, getParameters(sol_2))
@@ -243,9 +251,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 1e-3, 
-                  epochsPerIteration = 3, 
+optimizeBlackHole(learningRate = 1e-2, 
+                  epochsPerIteration = 2, 
                   numberOfCycles = 2, 
                   totalTrainingPercent = 0.1, 
-                  true_parameters = [100, 0.5], # Create training data for these (p_0, e_0) values
-                  initial_guess = [101, 0.6]) # Take this initial (p, e) guess
+                  true_parameters = [10, 0], # Create training data for these (p_0, e_0) values
+                  initial_guess = [10.1, 0.1]) # Take this initial (p, e) guess
