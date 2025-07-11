@@ -25,7 +25,6 @@ training_h_plus_wave = []
 function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, totalTrainingPercent, true_parameters, initial_guess)
     
     trainingFraction = totalTrainingPercent # What total fraction of the training data will the neural network learn from?
-
     p_guess = pe_2_EL(initial_guess[1], initial_guess[2]) # Uses the pe_2_EL function to convert initial guess to (M = 1, E, L)
     
     true_p = true_parameters[1] # True semi-latus rectum
@@ -39,62 +38,13 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     true_problem = trainingData[1] # True Problem (based on true_parameters input)
     true_solution = trainingData[2] # True Solution
 
-    # Defines the Neural Network as a correction to the Kepler Equations of Motion
-    # function SchwarzschildNN(du, u, p, t)
-    #     coord_time, r, θ, ϕ, p_t, p_r, p_θ, p_ϕ = u
-    #     M = p.M
-    #     E = p.E
-    #     L = p.L
-
-    #     NN_params = p.NN
-    #     F = NN(u, NN_params, NN_state)[1]
-
-    #     du[1] = dt = E * (1+F[1])
-    #     du[2] = dr = p_r * (1+F[2])
-    #     du[3] = dθ = 0
-    #     du[4] = dϕ = L/r^2
-
-    #     du[5] = dp_t = 0
-    #     du[6] = dp_r = (-M/r^2 + L^2/(r^3))*(1+F[3])
-    #     du[7] = dp_θ = 0
-    #     du[8] = dp_ϕ = 0
-    # end
-
-    function SchwarzschildNN_Pure_Hamiltonian(du, u, p, t)
-        coord_time, r, θ, ϕ, p_t, p_r, p_θ, p_ϕ = u
-        M = p.M
-        E = p.E  
-        L = p.L
-        NN_params = p.NN
-    
-        # Keplerian Hamiltonian baseline
-        H_kep = p_r^2/2 - M/r + L^2/(2*r^2)
-        
-        # Neural network correction
-        NN_correction = NN([r, p_r, L], NN_params, NN_state)[1][1] # gives (Output, State), so [1][1] = Output
-        
-        # Define total Hamiltonian for differentiation
-        H_total(r_val, pr_val) = pr_val^2/2 - M/r_val + L^2/(2*r_val^2) + NN([r_val, pr_val, L], NN_params, NN_state)[1][1]
-        
-        # Hamilton's equations
-        du[1] = E * (1 - 2*M/r)^(-1)  # Simple time evolution
-        du[2] = ForwardDiff.derivative(pr -> H_total(r, pr), p_r)  # ṙ = ∂H/∂p_r
-        du[3] = 0
-        du[4] = L/r^2
-        du[5] = 0
-        du[6] = -ForwardDiff.derivative(r_val -> H_total(r_val, p_r), r)  # ṗ_r = -∂H/∂r
-        du[7] = 0
-        du[8] = 0
-    end
-
     function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
         x = u
-        H(state_vec) = begin
+        function H(state_vec)
             t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
             M, E, L = p.M, p.E, p.L
             NN_params = p.NN
             
-            # Use p_φ instead of L in the angular term
             H_base = p_r^2/2 - M/r + p_φ^2/(2*r^2)
             NN_correction = NN([r, p_r, p_φ], NN_params, NN_state)[1][1]
             return H_base + NN_correction
@@ -127,8 +77,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     # Same weight initialization as your original
     for layer in NN_params
         if ~isempty(layer)
-            layer.weight .*= 0 .* layer.weight .+ precision(1e-6) * (randn(rng, eltype(layer.weight), size(layer.weight)))
-            layer.bias .*= 0 .* layer.bias .+ precision(1e-6) * (randn(rng, eltype(layer.bias), size(layer.bias)))
+            layer.weight .*= 0 .* layer.weight .+ precision(1e-2) * (randn(rng, eltype(layer.weight), size(layer.weight)))
+            layer.bias .*= 0 .* layer.bias .+ precision(1e-2) * (randn(rng, eltype(layer.bias), size(layer.bias)))
         end
     end
 
@@ -330,9 +280,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 7e-3, 
+optimizeBlackHole(learningRate = 8e-3, 
                   epochsPerIteration = 4, 
-                  numberOfCycles = 8, 
+                  numberOfCycles = 14, 
                   totalTrainingPercent = 0.13, 
                   true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.2]) # Take this initial (p, e) guess
+                  initial_guess = [10.2, 0.25]) # Take this initial (p, e) guess
