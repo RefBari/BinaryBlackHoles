@@ -133,20 +133,37 @@ function one2two(path, m1, m2)
     return r1, r2
 end
 
-function compute_waveform(dt, soln, mass_ratio, model_params=nothing)
+# Corrected co-orbital transformation function
+function rotate_waveform_to_coorbital(h_plus, h_cross, phi_array)
+    h_rotated = ComplexF64[]
+    for (h_p, h_c, phi) in zip(h_plus, h_cross, phi_array)
+        h = h_p + im * h_c
+        h_rot = h * exp(im * 2 * phi)  # Changed from -im to +im
+        push!(h_rotated, h_rot)
+    end
+    return real.(h_rotated), imag.(h_rotated)
+end
 
-    @assert mass_ratio <= 1.0 "mass_ratio must be <= 1"
-    @assert mass_ratio >= 0.0 "mass_ratio must be non-negative"
+function compute_waveform(dt, soln, mass_ratio; model_params=nothing, coorbital=false)
+
+    @assert 0.0 <= mass_ratio <= 1.0 "mass_ratio must be in [0,1]"
 
     orbit = soln2orbit(soln, model_params)
     if mass_ratio > 0
-        mass1 = mass_ratio/(1.0+mass_ratio)
-        mass2 = 1.0/(1.0+mass_ratio)
-
+        mass1 = mass_ratio / (1.0 + mass_ratio)
+        mass2 = 1.0 / (1.0 + mass_ratio)
         orbit1, orbit2 = one2two(orbit, mass1, mass2)
-        waveform = h_22_strain_two_body(dt, orbit1, mass1, orbit2, mass2)
+        h_plus, h_cross = h_22_strain_two_body(dt, orbit1, mass1, orbit2, mass2)
     else
-        waveform = h_22_strain_one_body(dt, orbit)
+        h_plus, h_cross = h_22_strain_one_body(dt, orbit)
     end
-    return waveform
-end;
+
+    if coorbital
+        phi_array = [u[4] for u in soln.u]
+        # FIX: Remove initial phase offset
+        phi_relative = phi_array .- phi_array[1]
+        h_plus, h_cross = rotate_waveform_to_coorbital(h_plus, h_cross, phi_relative)
+    end
+
+    return h_plus, h_cross
+end
