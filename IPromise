@@ -33,9 +33,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     # This trainingData returns [prob, true_sol, h_plus_training, h_cross_training]
     trainingData = create_Schwarzschild_trainingData([true_p, true_e]) # Generate Training Data (Gravitational Waveforms)
 
-    timestep = 1
+    timestep = 1 # Timestep for ODE Solver and Optimizer
 
-    true_problem = trainingData[1] # True Problem (based on true_parameters input)
     true_solution = trainingData[2] # True Solution
 
     function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
@@ -53,19 +52,17 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         # Compute gradient using ForwardDiff
         grad_H = ForwardDiff.gradient(H, x)
         
-        # Define symplectic matrix J (8x8)
-        J = [zeros(4,4)  I(4);
+        # Define symplectic matrix L (8x8)
+        L = [zeros(4,4)  I(4);
              -I(4)       zeros(4,4)]
         
-        # Hamilton's equations: ẋ = J ∇H
-        du .= J * grad_H
-        
-        # Optional: Override time evolution if you want the relativistic correction
-        # du[1] = p.E * (1 - 2*p.M/u[2])^(-1)
+        # Hamilton's equations: ẋ = L*∇H
+        du .= L * grad_H
+
     end
 
-    # Neural network setup (unchanged structure)
-    NN = Chain(Dense(3, 4, tanh),  # Keep same NN architecture as your original
+    # Neural network setup 
+    NN = Chain(Dense(3, 4, tanh), 
             Dense(4, 4, tanh),
             Dense(4, 1))        # Output 1 correction instead of 3
 
@@ -89,10 +86,10 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     R = initial_guess[1]/(1+initial_guess[2])
     E = p_guess[2]
     L = p_guess[3]
-    BH_Kick = 0
+    BH_SlightPush = 0
 
     # Initial State Vector for Particle orbiting Schwarzschild BH
-    u0 = [0, R, pi/2, 0, -1*E, BH_Kick, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
+    u0 = [0, R, pi/2, 0, -1*E, 0, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
     tspan = (0.0, 2000.0)
     t = 0:timestep:2000.0
 
@@ -281,8 +278,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 end
 
 optimizeBlackHole(learningRate = 8e-3, 
-                  epochsPerIteration = 4, 
-                  numberOfCycles = 14, 
-                  totalTrainingPercent = 0.13, 
+                  epochsPerIteration = 3, 
+                  numberOfCycles = 8, 
+                  totalTrainingPercent = 0.25, 
                   true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10.2, 0.25]) # Take this initial (p, e) guess
+                  initial_guess = [10, 0.2]) # Take this initial (p, e) guess
