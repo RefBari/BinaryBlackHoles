@@ -44,9 +44,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             M, E, L = p.M, p.E, p.L
             NN_params = p.NN
             
-            H_base = p_r^2/2 - M/r + p_φ^2/(2*r^2)
-            NN_correction = NN([r, p_r, p_φ], NN_params, NN_state)[1][1]
-            return H_base + NN_correction
+            H_kepler = p_r^2/2 - M/r + p_φ^2/(2*r^2)
+            NN_correction = NN([r, p_r, p_φ, p_t], NN_params, NN_state)[1][1]
+            return H_kepler + NN_correction
         end
         
         # Compute gradient using ForwardDiff
@@ -62,7 +62,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     end
 
     # Neural network setup 
-    NN = Chain(Dense(3, 4, tanh), 
+    NN = Chain(Dense(4, 4, tanh), # Learns correction term in terms of 4 parameters: r, p_t, p_r, p_ϕ
             Dense(4, 4, tanh),
             Dense(4, 1))        # Output 1 correction instead of 3
 

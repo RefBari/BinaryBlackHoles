@@ -70,8 +70,8 @@ function create_Schwarzschild_trainingData(initial_conditions)
   prob = ODEProblem(Schwarzschild_Geodesics, u0, tspan, p_actual)
   true_sol = solve(prob, Tsit5(), saveat = timestep)
 
-  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
-  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
+  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[1]
+  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[2]
 
   skip_initial_points = 0
   skip_end_points = 0
@@ -86,5 +86,5 @@ function create_Schwarzschild_trainingData(initial_conditions)
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-create_Schwarzschild_trainingData([10, 0])
+# create_Schwarzschild_trainingData([10, 0.2])
 # getParameters(solution, 0)
