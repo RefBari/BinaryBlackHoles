@@ -43,14 +43,17 @@ function create_Schwarzschild_trainingData(initial_conditions)
       M, E, L = p # parameters (Mass, Energy, Angular Momentum)
       
       du[1] = dt = E*(1-2*M/r)^(-1)
-      du[2] = dr = (1-2*M/r)*p_r
+
+      convertToCoordinateTime = ( du[1] )^(-1)
+
+      du[2] = dr = ( (1-2*M/r)*p_r ) * convertToCoordinateTime
       du[3] = dθ = 0
-      du[4] = dϕ = r^(-2)*L
+      du[4] = dϕ = ( r^(-2)*L ) * convertToCoordinateTime
 
       du[5] = dp_t = 0
-      du[6] = dp_r = -(1/2)*( (1-2*M/r)^(-2)*(2*M/r^2)*(p_t)^2
+      du[6] = dp_r = ( -(1/2)*( (1-2*M/r)^(-2)*(2*M/r^2)*(p_t)^2
                       + (2*M/(r^2))*(p_r)^2
-                      - 2*(r^(-3))*(L)^2)
+                      - 2*(r^(-3))*(L)^2) ) * convertToCoordinateTime
       du[7] = dp_θ = 0
       du[8] = dp_ϕ = 0
   end
@@ -67,8 +70,8 @@ function create_Schwarzschild_trainingData(initial_conditions)
   prob = ODEProblem(Schwarzschild_Geodesics, u0, tspan, p_actual)
   true_sol = solve(prob, Tsit5(), saveat = timestep)
 
-  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[1]
-  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[2]
+  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
+  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
 
   skip_initial_points = 0
   skip_end_points = 0
@@ -83,5 +86,5 @@ function create_Schwarzschild_trainingData(initial_conditions)
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-# create_Schwarzschild_trainingData([10, 0.1])
+create_Schwarzschild_trainingData([10, 0])
 # getParameters(solution, 0)
