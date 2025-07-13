@@ -44,7 +44,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             M, E, L = p.M, p.E, p.L
             NN_params = p.NN
             
-            H_kepler = p_r^2/2 - M/r + p_φ^2/(2*r^2)
+            # H_kepler = p_r^2/2 - M/r + p_φ^2/(2*r^2)
+            f = (1-((2*M)/r))
+            H_kepler = f*p_r^2/2 + p_φ^2/(2*r^2)
             NN_correction = NN([r, p_r, p_φ, p_t], NN_params, NN_state)[1][1]
             return H_kepler + NN_correction
         end
@@ -277,9 +279,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 8e-3, 
+optimizeBlackHole(learningRate = 1e-3, 
                   epochsPerIteration = 3, 
                   numberOfCycles = 8, 
-                  totalTrainingPercent = 0.25, 
+                  totalTrainingPercent = 0.1, 
                   true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
                   initial_guess = [10, 0.2]) # Take this initial (p, e) guess
