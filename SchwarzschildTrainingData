@@ -62,16 +62,16 @@ function create_Schwarzschild_trainingData(initial_conditions)
   R = semirectum*M/(1+ecc) # Radius of Orbit
   
   u0 = [0, R, pi/2, 0, -1*E, 0, 0, L]
-  tspan = (0.0, 2000)
-  timestep = 1
-  t_full = 0:timestep:2000
+  tspan = (0.0, 6.0f4)
+  timestep = 100.0
+  t_full = 0:timestep:6.0f4
   p_actual = [M, E, L]
 
   prob = ODEProblem(Schwarzschild_Geodesics, u0, tspan, p_actual)
-  true_sol = solve(prob, Tsit5(), saveat = timestep)
+  true_sol = solve(prob, RK4(), saveat = timestep)
 
-  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[1]
-  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[2]
+  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
+  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
 
   skip_initial_points = 0
   skip_end_points = 0
@@ -86,5 +86,5 @@ function create_Schwarzschild_trainingData(initial_conditions)
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-# create_Schwarzschild_trainingData([10, 0.2])
+create_Schwarzschild_trainingData([100, 0.5])
 # getParameters(solution, 0)
