@@ -71,6 +71,33 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     end
 
+    # function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
+    #     x = u
+        
+    #     function H(state_vec)
+    #         t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
+    #         M, E, L = p
+            
+    #         f = (1 - ((2*M)/r))
+    
+    #         H_schwarzschild = (f/E) * 1/2 * ( - f^(-1) * (p_t)^2 + f * p_r^2 - M/r + p_φ^2/(r^2) )
+    #         NN_correction = NN([r, p_r, p_φ, p_t], NN_params, NN_state)[1][1]
+    
+    #         return H_schwarzschild + NN_correction # Returns equations of motion in COORDINATE time
+    #     end
+        
+    #     # Compute gradient using ForwardDiff
+    #     grad_H = ForwardDiff.gradient(H, x)
+    
+    #     # Define symplectic matrix J (8x8)
+    #     J = [zeros(4,4)  I(4);
+    #          -I(4)       zeros(4,4)]
+        
+    #     # Hamilton's equations: ẋ = J*∇H
+    #     du .= J * grad_H
+    
+    # end
+
     # Neural network setup 
     NN = Chain(Dense(4, 4, tanh), # Learns correction term in terms of 4 parameters: r, p_t, p_r, p_ϕ
             Dense(4, 4, tanh),

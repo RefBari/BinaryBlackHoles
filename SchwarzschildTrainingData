@@ -113,5 +113,5 @@ end
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-badresults = create_Schwarzschild_trainingData([100, 0.5])
+results = create_Schwarzschild_trainingData([100, 0.5])
 # getParameters(solution, 0)
