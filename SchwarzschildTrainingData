@@ -59,15 +59,14 @@ function create_Schwarzschild_trainingData(initial_conditions)
   end
 
   function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
-    x = u
+    x = u # u[1] = t, u[2] = r, u[3] = θ, u[4] = ϕ  
+    M, E, L = p
     
     function H(state_vec)
         t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
-        M, E, L = p
-        
         f = (1 - ((2*M)/r))
 
-        H_schwarzschild = (f/E) * 1/2 * ( - f^(-1) * (p_t)^2 + f * p_r^2 - M/r + p_φ^2/(r^2) )
+        H_schwarzschild = 1/2 * ( - f^(-1) * (p_t)^2 + f * (p_r)^2 + (p_φ)^2/r^2 )
 
         return H_schwarzschild # Returns equations of motion in COORDINATE time
     end
@@ -80,8 +79,20 @@ function create_Schwarzschild_trainingData(initial_conditions)
          -I(4)       zeros(4,4)]
     
     # Hamilton's equations: ẋ = J*∇H
-    du .= J * grad_H
+    du_dτ = J * grad_H
 
+    t_val, r_val = x[1], x[2]
+    f_val = 1 - 2*M/r_val
+    dτ_dt = f_val/E
+
+    du[1] = 1/dτ_dt # dt/dτ
+    du[2] = du_dτ[2] * dτ_dt
+    du[3] = du_dτ[3] * dτ_dt
+    du[4] = du_dτ[4] * dτ_dt
+    du[5] = du_dτ[5] * dτ_dt
+    du[6] = du_dτ[6] * dτ_dt
+    du[7] = du_dτ[7] * dτ_dt
+    du[8] = du_dτ[8] * dτ_dt
 end
 
   M, E, L = pe_2_EL(semirectum, ecc)
@@ -93,11 +104,11 @@ end
   t_full = 0:timestep:6e4
   p_actual = [M, E, L]
 
-  prob = ODEProblem(Schwarzschild_Geodesics, u0, tspan, p_actual)
+  prob = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, p_actual)
   true_sol = solve(prob, RK4(), saveat = timestep)
 
-  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
-  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
+  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[1]
+  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[2]
 
   skip_initial_points = 0
   skip_end_points = 0
@@ -107,7 +118,7 @@ end
   t_truncated = t_full[(skip_initial_points+1):end-skip_end_points]
 
   p = plot!(t_truncated, h_plus_training, label=L"GW using $\dot{r},\dot{\phi}$ (Schwarzschild Coordinates)", 
-        linewidth = 2, alpha = 0.5, color = "green", xlabel = "t", ylabel = "h₊",
+        linewidth = 2, alpha = 0.5, color = "red", xlabel = "t", ylabel = "h₊",
         top_margin = 10mm, bottom_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
   display(p)
   return [prob, true_sol, h_plus_training, h_cross_training]
