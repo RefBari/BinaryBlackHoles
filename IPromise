@@ -36,44 +36,6 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     timestep = 1 # Timestep for ODE Solver and Optimizer
 
     true_solution = trainingData[2] # True Solution
-    function physics_informed_features(r, p_t, p_r, p_φ, M=1.0)
-        """
-        Create physics-informed features that are likely to appear in relativistic corrections
-        These features encode the mathematical structures we expect in General Relativity
-        """
-        
-        # Basic metric-related features (appear in all GR calculations)
-        f = 1 - 2*M/r  # Schwarzschild metric factor
-        f_inv = 1/f    # Inverse metric factor (appears in time components)
-        
-        # Radial features (relativistic corrections often have inverse powers of r)
-        r_inv = 1/r
-        r_inv2 = 1/(r^2)
-        r_inv3 = 1/(r^3)
-        
-        # Momentum-squared features (kinetic energy terms)
-        p_t_sq = p_t^2
-        p_r_sq = p_r^2
-        p_φ_sq = p_φ^2
-        
-        # Cross terms that often appear in relativistic Hamiltonians
-        p_t_sq_over_f = p_t_sq * f_inv  # This is exactly what appears in Schwarzschild!
-        p_r_sq_times_f = p_r_sq * f     # This too!
-        
-        # Angular momentum per unit mass squared (another common GR term)
-        L_sq_over_r_sq = p_φ_sq * r_inv2
-        
-        # Collect all features
-        features = [
-            f, f_inv,                           # Metric factors
-            r_inv, r_inv2, r_inv3,             # Radial powers  
-            p_t_sq, p_r_sq, p_φ_sq,            # Momentum squares
-            p_t_sq_over_f, p_r_sq_times_f,     # Relativistic combinations
-            L_sq_over_r_sq                      # Angular terms
-        ]
-        
-        return features
-    end
 
     function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
         x = u
@@ -321,7 +283,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 1e-3,
+optimizeBlackHole(learningRate = 5e-3,
                   epochsPerIteration = 4, 
                   numberOfCycles = 8, 
                   totalTrainingPercent = 0.15, 
