@@ -27,7 +27,7 @@ tspan = (0.0f0, 6.0f4)
 tsteps = range(tspan[1], tspan[2], length = datasize)
 dt_data = tsteps[2] - tsteps[1]
 dt = 100.0
-model_params = [100.0, 1.0, 0.5] # p, M, e
+model_params = [50.0, 1.0, 0.5] # p, M, e
 
 # Generate waveform data
 prob = ODEProblem(RelativisticOrbitModel, u0, tspan, model_params)
