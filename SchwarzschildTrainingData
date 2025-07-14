@@ -58,20 +58,44 @@ function create_Schwarzschild_trainingData(initial_conditions)
       du[8] = dp_ϕ = 0
   end
 
+  function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
+    x = u
+    function H(state_vec)
+        t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
+        convertToCoordinateTime = E*(1-2*M/r)
+        M = 1
+        f = (1 - ((2*M)/R))
+        H_schwarzschild = 1/2 * ( - f^(-1) * (p_t)^2 + f * p_r^2 - M/r + p_φ^2/(r^2) )
+
+        return H_schwarzschild * convertToCoordinateTime
+    end
+    
+    # Compute gradient using ForwardDiff
+    grad_H = ForwardDiff.gradient(H, x)
+
+    # Define symplectic matrix L (8x8)
+    L = [zeros(4,4)  I(4);
+         -I(4)       zeros(4,4)]
+    
+    # Hamilton's equations: ẋ = L*∇H
+    du .= L * grad_H
+
+end
+
   M, E, L = pe_2_EL(semirectum, ecc)
   R = semirectum*M/(1+ecc) # Radius of Orbit
   
   u0 = [0, R, pi/2, 0, -1*E, 0, 0, L]
-  tspan = (0.0, 2000)
-  timestep = 1
-  t_full = 0:timestep:2000
+  tspan = (0.0, 6e4)
+  timestep = 100
+  t_full = 0:timestep:6e4
   p_actual = [M, E, L]
 
-  prob = ODEProblem(Schwarzschild_Geodesics, u0, tspan, p_actual)
+  prob = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, p_actual)
   true_sol = solve(prob, RK4(), saveat = timestep)
 
-  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[1]
-  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=true)[2]
+  h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
+  h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
 
   skip_initial_points = 0
   skip_end_points = 0
@@ -80,11 +104,12 @@ function create_Schwarzschild_trainingData(initial_conditions)
   h_cross_training = h_cross_full[(skip_initial_points+1):end-skip_end_points]
   t_truncated = t_full[(skip_initial_points+1):end-skip_end_points]
 
-  p = plot(t_truncated, h_plus_training, label=L"GW using $\dot{r},\dot{\phi}$ (Schwarzschild Coordinates)", 
-        linewidth = 2, alpha = 0.5, color = "green", xlabel = "t", ylabel = "h_+")
+  p = plot!(t_truncated, h_plus_training, label=L"GW using $\dot{r},\dot{\phi}$ (Schwarzschild Coordinates)", 
+        linewidth = 2, alpha = 0.5, color = "green", xlabel = "t", ylabel = "h₊",
+        top_margin = 10mm, bottom_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
   display(p)
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-# create_Schwarzschild_trainingData([100, 0.5])
+badresults = create_Schwarzschild_trainingData([100, 0.5])
 # getParameters(solution, 0)
