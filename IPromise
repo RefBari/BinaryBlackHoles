@@ -47,27 +47,37 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     true_solution = trainingData[2] # True Solution
 
     function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
-        x = u
+        x = u # u[1] = t, u[2] = r, u[3] = θ, u[4] = ϕ  
+        NN_params = p.NN
+        M, E, L = p.parameters.M, p.parameters.E, p.parameters.L
+
         function H(state_vec)
             t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
-            NN_params = p.NN
-            M = 1
+
             H_kepler = p_r^2/2 - M/r + p_φ^2/(2*r^2)
 
             NN_correction = NN([r, p_r, p_φ, p_t], NN_params, NN_state)[1][1]
 
-            return H_kepler + NN_correction
+            return H_kepler + NN_correction # Returns equations of motion in PROPER time
         end
         
         # Compute gradient using ForwardDiff
         grad_H = ForwardDiff.gradient(H, x)
         
         # Define symplectic matrix L (8x8)
-        L = [zeros(4,4)  I(4);
+        J = [zeros(4,4)  I(4);
              -I(4)       zeros(4,4)]
         
-        # Hamilton's equations: ẋ = L*∇H
-        du .= L * grad_H
+        # # Hamilton's equations: ẋ = L*∇H
+        # du .= L * grad_H
+        # Hamilton's equations: ẋ = J*∇H
+        du_dτ = J * grad_H
+
+        t_val, r_val = x[1], x[2]
+        f_val = 1 - 2*M/r_val
+        dτ_dt = f_val/E
+
+        du .= du_dτ .* dτ_dt # du / dt Returns equations of motion in COORDINATE time
 
     end
 
@@ -90,13 +100,13 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     end
 
     # What will the neural network learn? The following parameters: M, E, L, NN_param
-    θ = (; NN = NN_params)
-    θ = ComponentVector{precision}(θ);
-
     R = initial_guess[1]/(1+initial_guess[2])
     E = p_guess[2]
     L = p_guess[3]
     BH_SlightPush = 0
+    
+    θ = (; NN = NN_params, parameters = (M = M, E = E, L = L))
+    θ = ComponentVector{precision}(θ);
 
     # Initial State Vector for Particle orbiting Schwarzschild BH
     u0 = [0, R, pi/2, 0, -1*E, 0, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
@@ -106,7 +116,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     # Define the ODE Problem using the Neural Network
     prob_learn = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, θ)
 
-    function evaluateHamiltonian(u){}
+    function evaluateHamiltonian(u)
         M = 1
         r = u[2]
         f = 1-(2*M/r)
@@ -287,9 +297,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 5e-3,
-                  epochsPerIteration = 3, 
-                  numberOfCycles = 6, 
-                  totalTrainingPercent = 0.10, 
+optimizeBlackHole(learningRate = 6e-3,
+                  epochsPerIteration = 5, 
+                  numberOfCycles = 13, 
+                  totalTrainingPercent = 0.17, 
                   true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
                   initial_guess = [10, 0.2]) # Take this initial (p, e) guesss
