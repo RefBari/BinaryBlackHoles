@@ -24,7 +24,15 @@ final_predicted_h_plus = []
 training_h_plus_wave = []
 
 function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, totalTrainingPercent, true_parameters, initial_guess)
-    
+   
+    global losses = []
+    global partition_boundaries = []
+    global final_paramaters = []
+    global solutions_list = []
+    global parameters_list = []
+    global final_predicted_h_plus = []
+    global training_h_plus_wave = []
+
     trainingFraction = totalTrainingPercent # What total fraction of the training data will the neural network learn from?
     p_guess = pe_2_EL(initial_guess[1], initial_guess[2]) # Uses the pe_2_EL function to convert initial guess to (M = 1, E, L)
     
@@ -279,110 +287,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-# hyperparameter_space = (
-#     learning_rate = Continuous(1e-5, 1e-1, scale=:log),     # Log scale because LR effects are multiplicative
-#     epochs_per_iteration = Discrete([3, 5, 8, 12]),         # Training intensity per cycle
-#     number_of_cycles = Discrete([4, 6, 8, 12]),             # How many training cycles
-#     training_percent = Continuous(0.05, 0.25),              # What fraction of data to use # Initial weight magnitude
-# )
-
-function objective_function(hyperparams)
-    """
-    This function takes a set of hyperparameters and returns a score
-    indicating how well they perform. Lower scores are better.
-    """
-    
-    try
-        # Extract hyperparameters from the search algorithm
-        lr = hyperparams.learning_rate
-        epochs = hyperparams.epochs_per_iteration
-        cycles = hyperparams.number_of_cycles
-        training_pct = hyperparams.training_percent
-        
-        # Modify your network architecture based on hyperparameters
-        # This is where the search algorithm experiments with different structures
-        layers = []
-        push!(layers, Dense(4, net_width, tanh))  # Input layer (4 physics features)
-        push!(layers, Dense(net_width, 1))  # Output layer
-        
-        NN = Chain(layers...)
-        
-        # Run your training with these hyperparameters
-        # You'll need to modify your optimizeBlackHole function to accept these parameters
-        final_loss = run_training_experiment(
-            NN = NN,
-            learningRate = lr,
-            epochsPerIteration = epochs,
-            numberOfCycles = cycles,
-            totalTrainingPercent = training_pct,
-            true_parameters = [10, 0.2],
-            initial_guess = [10, 0.2]
-        )
-        
-        return final_loss
-        
-    catch e
-        # If training fails completely, return a very high penalty
-        # This teaches the search algorithm to avoid parameter combinations that cause crashes
-        println("Training failed with error: $e")
-        return 1e6
-    end
-end
-
-# Define hyperparameter combinations to test
-hyperparameter_combinations = [
-    (learning_rate = 1e-4, epochs_per_iteration = 3, number_of_cycles = 4, training_percent = 0.1),
-    (learning_rate = 5e-4, epochs_per_iteration = 5, number_of_cycles = 6, training_percent = 0.15),
-    (learning_rate = 1e-3, epochs_per_iteration = 8, number_of_cycles = 8, training_percent = 0.2),
-    (learning_rate = 5e-3, epochs_per_iteration = 5, number_of_cycles = 6, training_percent = 0.15),
-    (learning_rate = 1e-2, epochs_per_iteration = 3, number_of_cycles = 4, training_percent = 0.1),
-    # Add more combinations as needed
-]
-
-function run_hyperparameter_search()
-    best_loss = Inf
-    best_params = nothing
-    all_results = []
-    
-    for (i, params) in enumerate(hyperparameter_combinations)
-        println("Testing combination $i: $params")
-        
-        try
-            # Run training with these parameters
-            final_loss = optimizeBlackHole(
-                learningRate = params.learning_rate,
-                epochsPerIteration = params.epochs_per_iteration,
-                numberOfCycles = params.number_of_cycles,
-                totalTrainingPercent = params.training_percent,
-                true_parameters = [10, 0.2],
-                initial_guess = [10, 0.2]
-            )
-            
-            push!(all_results, (params = params, loss = final_loss))
-            
-            if final_loss < best_loss
-                best_loss = final_loss
-                best_params = params
-                println("New best result! Loss: $final_loss")
-            end
-            
-        catch e
-            println("Failed with error: $e")
-            push!(all_results, (params = params, loss = Inf))
-        end
-    end
-    
-    return best_params, best_loss, all_results
-end
-
-# Run the search
-best_params, best_loss, all_results = run_hyperparameter_search()
-println("Best parameters: $best_params")
-println("Best loss: $best_loss")
-
-optimizeBlackHole(learningRate = 5.7e-3,
+optimizeBlackHole(learningRate = 5e-3,
                   epochsPerIteration = 4, 
                   numberOfCycles = 8, 
-                  totalTrainingPercent = 0.15, 
+                  totalTrainingPercent = 0.10, 
                   true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.2]) # Take this initial (p, e) guess
+                  initial_guess = [10, 0.2]) # Take this initial (p, e) guesss
