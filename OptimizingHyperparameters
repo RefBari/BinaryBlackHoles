@@ -1,6 +1,6 @@
 using LinearAlgebra
+using Distributions
 using Plots
-using HyperTuning
 using DifferentialEquations
 using LaTeXStrings
 using Optimization, OptimizationOptimJL
@@ -99,6 +99,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     # What will the neural network learn? The following parameters: M, E, L, NN_param
     R = initial_guess[1]/(1+initial_guess[2])
+    M = p_guess[1]
     E = p_guess[2]
     L = p_guess[3]
     BH_SlightPush = 0
@@ -295,9 +296,47 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 6e-3,
-                  epochsPerIteration = 2, 
-                  numberOfCycles = 7, 
-                  totalTrainingPercent = 0.25, 
-                  true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.2]) # Take this initial (p, e) guesss
+function objective_function(learningRate, epochsPerIteration, numberOfCycles, totalTrainingPercent)
+    try
+        parameter_error = optimizeBlackHole(
+            learningRate = learningRate,
+            epochsPerIteration = epochsPerIteration, 
+            numberOfCycles = numberOfCycles,
+            totalTrainingPercent = totalTrainingPercent,
+            true_parameters = [10, 0.2],
+            initial_guess = [10, 0.2]
+        )
+        println("lr=$learningRate, epochs=$epochsPerIteration → error=$parameter_error")
+        return parameter_error
+    catch e
+        println("Failed: $e")
+        return 100.0
+    end
+end
+
+# Use ONLY discrete choices to avoid any distribution conflicts
+ho = @hyperopt for i=20,
+    learningRate = [1e-3, 3e-3, 6e-3, 1e-2, 2e-2],      # Pick from list
+    epochsPerIteration = [2, 5, 10, 20, 50],             # Pick from list
+    numberOfCycles = [3, 5, 7, 10, 15],                  # Pick from list  
+    totalTrainingPercent = [0.1, 0.17, 0.3, 0.5, 0.7]   # Pick from list
+    
+    objective_function(learningRate, epochsPerIteration, numberOfCycles, totalTrainingPercent)
+end
+
+println("🏆 BEST PARAMETERS:")
+println("Learning Rate: $(ho.minimizer[1])")
+println("Epochs: $(ho.minimizer[2])")  
+println("Cycles: $(ho.minimizer[3])")
+println("Training %: $(ho.minimizer[4])")
+println("Best Error: $(ho.minimum)")
+
+# Run with best parameters
+optimizeBlackHole(
+    learningRate = ho.minimizer[1],
+    epochsPerIteration = ho.minimizer[2], 
+    numberOfCycles = ho.minimizer[3],
+    totalTrainingPercent = ho.minimizer[4],
+    true_parameters = [10, 0.2],
+    initial_guess = [10, 0.2]
+)
