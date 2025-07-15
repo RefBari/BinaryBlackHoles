@@ -1,6 +1,5 @@
 using LinearAlgebra
 using Plots
-using HyperTuning
 using DifferentialEquations
 using LaTeXStrings
 using Optimization, OptimizationOptimJL
@@ -99,6 +98,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     # What will the neural network learn? The following parameters: M, E, L, NN_param
     R = initial_guess[1]/(1+initial_guess[2])
+    M = p_guess[1]
     E = p_guess[2]
     L = p_guess[3]
     BH_SlightPush = 0
@@ -128,7 +128,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     function loss(pn, trainingFraction)
         newprob = remake(prob_learn, p = pn)
         sol = solve(newprob, RK4(), saveat=timestep)
-        
+
         predicted_waveform_plus = compute_waveform(timestep, sol, 1.0; coorbital=false)[1]
         predicted_waveform_cross = compute_waveform(timestep, sol, 1.0; coorbital=false)[2]
         
@@ -195,6 +195,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     sol = solve(newprob, Tsit5(), saveat=timestep)
     push!(solutions_list, sol)
 
+
+
     h_plus_pred = compute_waveform(timestep, sol, 1.0; coorbital=false)[1]
     h_cross_pred = compute_waveform(timestep, sol, 1.0; coorbital=false)[2]
 
@@ -246,7 +248,34 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             sol_2 = solve(newprob_2, Tsit5(), saveat=timestep)
             push!(solutions_list, sol_2)
             push!(parameters_list, getParameters(sol_2))
-    
+        
+            # Extract predicted and true solution components
+            y2 = sol_2[2,:] # r (radial) coordinate solutions  
+            y4 = sol_2[4,:] # planar angle solutions
+
+            y2_true = true_solution[2,:] 
+            y4_true = true_solution[4,:] 
+        
+            # Create orbital trajectory plot
+            particle_x = y2 .* cos.(y4)
+            particle_y = y2 .* sin.(y4)
+
+            particle_x_true = y2_true .* cos.(y4_true)
+            particle_y_true = y2_true .* sin.(y4_true)
+            
+            p2 = plot(particle_x, particle_y,
+                aspect_ratio = 1, linewidth = 2,
+                title = "Predicted Trajectory",
+                xlabel = "x",
+                ylabel = "y",
+                label = "Predicted Trajectory",
+                bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
+
+            plot!(particle_x_true, particle_y_true, linewidth = 2,
+                label = "True Trajectory", color = "lightsalmon1", linestyle=:dash)
+        
+            display(p2)
+
             h_plus_pred = compute_waveform(timestep, sol_2, 1.0; coorbital=false)[1]
             h_cross_pred = compute_waveform(timestep, sol_2, 1.0; coorbital=false)[2]
     
@@ -285,7 +314,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     y = (x .- 6) ./ 2
     p = plot(x, y, ylims=(-0.1, 1), xlims = (6, 12), linewidth = 3, bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm, label = "Separatrix", xlabel = "p (Semi-latus Rectum)", ylabel = "e (Eccentricity)", legend=:bottomright)
     scatter!([getParameters(true_solution)[1]], [getParameters(true_solution)[2]], color = "lightsalmon", markersize = 5, label = "True Parameters")
-    
+
     for i in 1:numCycles
         scatter!([parameters_list[i][1]], [parameters_list[i][2]], color = "darkseagreen1", markersize = 3, legend = false)
     end
@@ -295,9 +324,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 6e-3,
-                  epochsPerIteration = 2, 
+optimizeBlackHole(learningRate = 1e-2,
+                  epochsPerIteration = 5, 
                   numberOfCycles = 7, 
-                  totalTrainingPercent = 0.25, 
-                  true_parameters = [10, 0.2], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.2]) # Take this initial (p, e) guesss
+                  totalTrainingPercent = 0.17, 
+                  true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
+                  initial_guess = [10, 0.5]) # Take this initial (p, e) guesss
