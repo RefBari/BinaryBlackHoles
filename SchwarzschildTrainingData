@@ -103,7 +103,7 @@ end
   h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
   h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
 
-  skip_initial_points = 0
+  skip_initial_points = 1
   skip_end_points = 0
 
   h_plus_training = h_plus_full[(skip_initial_points+1):end-skip_end_points]

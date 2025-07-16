@@ -147,9 +147,10 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         
         orbital_loss = sum(abs2, predicted_r_values[1:n_compare] .- true_r_values[1:n_compare])
 
-        loss_value = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
-        loss_value += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
-        loss_value += orbital_loss
+        waveform_loss = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
+        waveform_loss += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
+        
+        loss_value = waveform_loss + 0.001 * orbital_loss
         loss_value /= n_compare
 
         H_violations = []
@@ -223,7 +224,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     t_plot = (0:n_train-1) * timestep
 
     p = plot(t_plot, h_plus_training, label="h+ true", linewidth=2,
-        xlabel="Time (s)", ylabel="h+ Amplitude",
+        xlabel="Time (s)", ylabel=L"h_+ \text{ Amplitude}",
         legend=:topright, grid=true, top_margin = 10mm, bottom_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
     plot!(t_plot, h_plus_pred_plot, label="h+ predicted", linewidth=2)# plot!(t_plot, predicted_waveform_plus_old_padded, label="h+ initial prediction", linewidth=2)
     display(p)
@@ -345,9 +346,10 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 6e-3,
-                  epochsPerIteration = 10, 
-                  numberOfCycles = 8, 
-                  totalTrainingPercent = 0.25, 
+optimizeBlackHole(learningRate = 10e-3,
+                  epochsPerIteration = 4, 
+                  numberOfCycles = 5, 
+                  totalTrainingPercent = 0.22, 
                   true_parameters = [10, 0.3], # Create training data for these (p_0, e_0) values
                   initial_guess = [10, 0.3]) # Take this initial (p, e) guesss
+
