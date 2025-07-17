@@ -38,26 +38,6 @@ function create_Schwarzschild_trainingData(initial_conditions)
   semirectum = initial_conditions[1] # Semi-latus rectum
   ecc = initial_conditions[2] # Eccentricity
 
-  # function Schwarzschild_Geodesics(du, u, p, t)
-  #     coord_time, r, θ, ϕ, p_t, p_r, p_θ, p_ϕ = u # state (Schwarzschild Coordinates)
-  #     M, E, L = p # parameters (Mass, Energy, Angular Momentum)
-      
-  #     du[1] = dt = E*(1-2*M/r)^(-1)
-
-  #     convertToCoordinateTime = ( du[1] )^(-1)
-
-  #     du[2] = dr = ( (1-2*M/r)*p_r ) * convertToCoordinateTime
-  #     du[3] = dθ = 0
-  #     du[4] = dϕ = ( r^(-2)*L ) * convertToCoordinateTime
-
-  #     du[5] = dp_t = 0
-  #     du[6] = dp_r = ( -(1/2)*( (1-2*M/r)^(-2)*(2*M/r^2)*(p_t)^2
-  #                     + (2*M/(r^2))*(p_r)^2
-  #                     - 2*(r^(-3))*(L)^2) ) * convertToCoordinateTime
-  #     du[7] = dp_θ = 0
-  #     du[8] = dp_ϕ = 0
-  # end
-
   function SchwarzschildHamiltonian_GENERIC(du, u, p, t)
     x = u # u[1] = t, u[2] = r, u[3] = θ, u[4] = ϕ  
     M, E, L = p
@@ -86,7 +66,6 @@ function create_Schwarzschild_trainingData(initial_conditions)
     dτ_dt = f_val/E
 
     du .= du_dτ .* dτ_dt # du / dt Returns equations of motion in COORDINATE time
-    du[1] = 1/dτ_dt
 end
 
   M, E, L = pe_2_EL(semirectum, ecc)

@@ -75,7 +75,6 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         dτ_dt = f_val/E
 
         du .= du_dτ .* dτ_dt # du / dt Returns equations of motion in COORDINATE time
-        du[1] = 1/dτ_dt
     end
 
     # Neural network setup 
@@ -128,8 +127,6 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     function loss(pn, trainingFraction)
         newprob = remake(prob_learn, p = pn)
         sol = solve(newprob, RK4(), saveat=timestep)
-        # print(size(sol), " & ", size(sol[1]), " & ", size(sol[1][2]))
-        # print("sol[1][2:] is ", sol[2, :], "\n")
 
         predicted_waveform_plus = compute_waveform(timestep, sol, 1.0; coorbital=false)[1]
         predicted_waveform_cross = compute_waveform(timestep, sol, 1.0; coorbital=false)[2]
@@ -156,12 +153,12 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
         orbital_loss = 2*sum(abs2, predicted_r_values[1:n_compare] .- true_r_values[1:n_compare])
         orbital_loss += 8*sum(abs2, predicted_ϕ_values[1:n_compare] .- true_ϕ_values[1:n_compare])
-        orbital_loss += 9*sum(abs2, predicted_ϕ_dot_values[1:n_compare] .- true_ϕ_dot_values[1:n_compare])
+        # orbital_loss += 9*sum(abs2, predicted_ϕ_dot_values[1:n_compare] .- true_ϕ_dot_values[1:n_compare])
 
         waveform_loss = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
         waveform_loss += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
         
-        loss_value = waveform_loss + 0.005 * orbital_loss
+        loss_value = waveform_loss + 0.01 * orbital_loss
         loss_value /= n_compare
 
         H_violations = []
@@ -375,9 +372,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 1e-2,
-                  epochsPerIteration = 6, 
-                  numberOfCycles = 5, 
+optimizeBlackHole(learningRate = 2e-2,
+                  epochsPerIteration = 5, 
+                  numberOfCycles = 8, 
                   totalTrainingPercent = 0.40, 
                   true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
                   initial_guess = [10, 0.5]) # Take this initial (p, e) guesss
