@@ -137,6 +137,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         true_r_values = trainingData[2][2,:]
         predicted_r_values = sol[2,:]
 
+        true_ϕ_values = trainingData[2][4,:]
+        predicted_ϕ_values = sol[4,:]
+
         h_plus_training = trainingData[3]
         h_cross_training = trainingData[4]
 
@@ -145,7 +148,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         n_pred = length(predicted_waveform_plus)
         n_compare = min(n_pred, n_train)
         
-        orbital_loss = sum(abs2, predicted_r_values[1:n_compare] .- true_r_values[1:n_compare])
+        orbital_loss = 2*sum(abs2, predicted_r_values[1:n_compare] .- true_r_values[1:n_compare])
+        orbital_loss += 7*sum(abs2, predicted_ϕ_values[1:n_compare] .- true_ϕ_values[1:n_compare])
 
         waveform_loss = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
         waveform_loss += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
@@ -223,10 +227,10 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     t_plot = (0:n_train-1) * timestep
 
-    p = plot(t_plot, h_plus_training, label="h+ true", linewidth=2,
-        xlabel="Time (s)", ylabel=L"h_+ \text{ Amplitude}",
+    p = plot(t_plot, h_plus_training, label=L"h_+ \textrm{true}", linewidth=2,
+        xlabel="Time (s)", ylabel=L"h_+ \textrm{Amplitude}",
         legend=:topright, grid=true, top_margin = 10mm, bottom_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
-    plot!(t_plot, h_plus_pred_plot, label="h+ predicted", linewidth=2)# plot!(t_plot, predicted_waveform_plus_old_padded, label="h+ initial prediction", linewidth=2)
+    plot!(t_plot, h_plus_pred_plot, label=L"h_+ \textrm{predicted}", linewidth=2)# plot!(t_plot, predicted_waveform_plus_old_padded, label="h+ initial prediction", linewidth=2)
     display(p)
 
     function partitionTraining(numCycles, totalTrainingFraction)
@@ -318,7 +322,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             t_plot = (0:n_train-1) * timestep
     
             p = plot(t_plot, h_plus_training, color = "lightsalmon", label="h+ true", linewidth=2,
-            xlabel="Time (s)", ylabel="h+ Amplitude",
+            xlabel="Time (s)", ylabel=L"h_+ \text{Amplitude}",
             legend=:topright, grid=true, bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
             plot!(t_plot, h_plus_pred_plot, label="h+ predicted",
                     color = "blue")# plot!(t_plot, predicted_waveform_plus_old_padded, label="h+ initial prediction", linewidth=2)
@@ -343,13 +347,31 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     
     display(p)
 
+    final_sol = solutions_list[end]
+
+    t_vals = final_sol[1,:]
+    pₜ_vals = final_sol[5,:]
+    p_ϕ_vals = final_sol[8,:]
+
+    pₜ_plot = plot(t_vals, pₜ_vals, title="Energy Conservation", 
+    xlabel="Time", ylabel=L"p_t", label=L"p_t",
+    linewidth=2, color="red", ylims = [0.9*minimum(pₜ_vals), 1.1*maximum(pₜ_vals)])
+    p_ϕ_plot = plot(t_vals, p_ϕ_vals, title="Angular Momentum Conservation",
+    xlabel="Time", ylabel=L"p_φ", label=L"p_φ",
+    linewidth=2, color="blue", ylims = [0.9*minimum(p_ϕ_vals), 1.1*maximum(p_ϕ_vals)])
+
+    conservedQuantities = plot(pₜ_plot, p_ϕ_plot, 
+                        layout=(2,1))
+
+    display(conservedQuantities)
+
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
 optimizeBlackHole(learningRate = 10e-3,
-                  epochsPerIteration = 4, 
+                  epochsPerIteration = 5, 
                   numberOfCycles = 5, 
-                  totalTrainingPercent = 0.22, 
-                  true_parameters = [10, 0.3], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.3]) # Take this initial (p, e) guesss
+                  totalTrainingPercent = 0.50, 
+                  true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
+                  initial_guess = [10, 0.5]) # Take this initial (p, e) guesss
 
