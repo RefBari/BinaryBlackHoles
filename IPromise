@@ -158,7 +158,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         waveform_loss = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
         waveform_loss += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
         
-        loss_value = 4 * waveform_loss + 0.01 * orbital_loss
+        loss_value = waveform_loss
         loss_value /= n_compare
 
         println("Training with fraction: ", trainingFraction, ", n_compare: ", n_compare, ", loss: ", loss_value)
@@ -368,6 +368,6 @@ end
 optimizeBlackHole(learningRate = 9e-3,
                   epochsPerIteration = 6, 
                   numberOfCycles = 12, 
-                  totalTrainingPercent = 0.16, 
+                  totalTrainingPercent = 0.11, 
                   true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
                   initial_guess = [10, 0.5]) # Take this initial (p, e) guesss

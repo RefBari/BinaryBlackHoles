@@ -43,10 +43,18 @@ function create_Schwarzschild_trainingData(initial_conditions)
     M, E, L = p
     
     function H(state_vec)
-        t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
+        t, r, θ, φ, p_t, p_r, p_θ, p_ϕ = state_vec
+        
         f = (1 - ((2*M)/r))
+        p = [p_t, p_r, p_θ, p_ϕ]
+        g = [
+              -f^(-1) 0 0 0;
+              0 f 0 0;
+              0 0 0 0;
+              0 0 0 r^(-2)
+            ]
 
-        H_schwarzschild = 1/2 * ( - f^(-1) * (p_t)^2 + f * (p_r)^2 + (p_φ)^2/r^2 )
+        H_schwarzschild = (1/2) * p' * g * p
 
         return H_schwarzschild # Returns equations of motion in PROPER time
     end
@@ -72,9 +80,9 @@ end
   R = semirectum*M/(1+ecc) # Radius of Orbit
   
   u0 = [0, R, pi/2, 0, -1*E, 0, 0, L]
-  tspan = (0.0, 2000)
-  timestep = 1
-  t_full = 0:timestep:2000
+  tspan = (0.0, 6e4)
+  timestep = 100
+  t_full = 0:timestep:6e4
   p_actual = [M, E, L]
 
   prob = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, p_actual)
@@ -97,5 +105,5 @@ end
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-# results = create_Schwarzschild_trainingData([100, 0.5])
+results = create_Schwarzschild_trainingData([100, 0.5])
 # getParameters(solution, 0)
