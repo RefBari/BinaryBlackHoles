@@ -51,13 +51,20 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         M, E, L = p.parameters.M, p.parameters.E, p.parameters.L
 
         function H(state_vec)
-            t, r, θ, φ, p_t, p_r, p_θ, p_φ = state_vec
+            t, r, θ, φ, p_t, p_r, p_θ, p_ϕ = state_vec
+            ŷ = NN([r], NN_params, NN_state)[1]
 
-            H_kepler = p_r^2/2 - M/r + p_φ^2/(2*r^2) + p_t
+            p = [p_t, p_r, p_θ, p_ϕ]
+            g = [
+                -1 * (1 + ŷ[1]) 0 0 0;
+                0 1 * (1 + ŷ[2]) 0 0;
+                0 0 0 0;
+                0 0 0 r^(-2)
+                ]
 
-            NN_correction = NN([r, p_r, p_φ, p_t], NN_params, NN_state)[1][1]
+            H = (1/2) * p' * g * p
 
-            return H_kepler + NN_correction # Returns equations of motion in PROPER time
+            return H # Returns Hamiltonian, whose E.O.M. will be in PROPER time
         end
         
         # Compute gradient using ForwardDiff
@@ -78,9 +85,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     end
 
     # Neural network setup 
-    NN = Chain(Dense(4, 4, tanh), # Learns correction term in terms of 4 parameters: r, p_t, p_r, p_ϕ
+    NN = Chain(Dense(1, 4, tanh), # Learns correction term in terms of 4 parameters: r, p_t, p_r, p_ϕ
             Dense(4, 4, tanh),
-            Dense(4, 1))        # Output 1 correction instead of 3
+            Dense(4, 2))        # Output 2 corrections, g^tt and g^rr
 
     rng = MersenneTwister(222)
     NN_params, NN_state = Lux.setup(rng, NN)
@@ -90,8 +97,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     # Same weight initialization as your original
     for layer in NN_params
         if ~isempty(layer)
-            layer.weight .= 0.15 * randn(rng, eltype(layer.weight), size(layer.weight))
-            layer.bias .= 0.01 * randn(rng, eltype(layer.bias), size(layer.bias))
+            layer.weight .= 0.1 * randn(rng, eltype(layer.weight), size(layer.weight))
+            layer.bias .= 0.02 * randn(rng, eltype(layer.bias), size(layer.bias))
         end
     end
 
@@ -107,8 +114,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     # Initial State Vector for Particle orbiting Schwarzschild BH
     u0 = [0, R, pi/2, 0, -1*E, 0, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
-    tspan = (0.0, 2000.0)
-    t = 0:timestep:2000.0
+    timeLength = 2000
+    tspan = (0.0, timeLength)
+    t = 0:timestep:timeLength
 
     # Define the ODE Problem using the Neural Network
     prob_learn = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, θ)
@@ -178,7 +186,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     # define Optimization Problem
     adtype = Optimization.AutoFiniteDiff() # instead of Optimization.AutoZygote(), use finite differences
-    optf = Optimization.OptimizationFunction((x, p) -> loss(x, trainingFraction), adtype)
+    optf = Optimization.OptimizationFunction((x, p) -> loss(x, trainingFraction/numberOfCycles), adtype)
     θ_init = θ;
 
     # create Optimization Problem (function + initial guess for parameters)
@@ -233,7 +241,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         amountTrain = totalTrainingFraction / numCycles
         p_final_array = [θ_final]
     
-        for i in 1:numCycles
+        for i in 2:numCycles
             trainingFraction = i * amountTrain
             push!(partition_boundaries, length(losses))
             push!(final_paramaters, p_final_array[end])
@@ -320,7 +328,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             legend=:topright, grid=true, bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
             plot!(t_plot, h_plus_pred_plot, label="h+ predicted",
                     color = "blue")# plot!(t_plot, predicted_waveform_plus_old_padded, label="h+ initial prediction", linewidth=2)
-            trainingWindow = trainingFraction * 2000
+            trainingWindow = trainingFraction * timeLength
             vline!([trainingWindow], color = "red", linestyle=:dash, label = "Training Window")
             display(p)
 
@@ -333,14 +341,26 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
     partitionTraining(numCycles, trainingFraction)
 
+    println("\n=== Neural Network Learned Corrections ===")
+    test_r_values = 6.0:0.5:10.0
+    println("r    | NN_1      | NN_2      | Target_1  | Target_2")
+    println("-----|-----------|-----------|-----------|----------")
+    for r_test in test_r_values
+        ŷ = NN([r_test], solutions_list[end].prob.p.NN, NN_state)[1]  # Use final trained parameters
+        target_1 = (2*M/r_test)/(1-2*M/r_test)  # Should be ≈ -2M/r for weak field  
+        target_2 = -2*M/r_test                   # Should be -2M/r
+        println("$(round(r_test, digits=1)) | $(round(ŷ[1], digits=3))     | $(round(ŷ[2], digits=3))     | $(round(target_1, digits=3))     | $(round(target_2, digits=3))")
+    end
+    println("===============================================\n")
+
     x = range(6, 12, length=20)
     y = (x .- 6) ./ 2
     p = plot(x, y, ylims=(-0.1, 1), xlims = (6, 12), linewidth = 3, bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm, label = "Separatrix", xlabel = "p (Semi-latus Rectum)", ylabel = "e (Eccentricity)", legend=:bottomright)
     scatter!([getParameters(true_solution)[1]], [getParameters(true_solution)[2]], color = "lightsalmon", markersize = 5, label = "True Parameters")
 
-    for i in 1:numCycles
-        scatter!([parameters_list[i][1]], [parameters_list[i][2]], color = "darkseagreen1", markersize = 3, legend = false)
-    end
+    # for i in 1:numCycles
+    #     scatter!([parameters_list[i][1]], [parameters_list[i][2]], color = "darkseagreen1", markersize = 3, legend = false)
+    # end
     
     display(p)
 
@@ -365,9 +385,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 9e-3,
-                  epochsPerIteration = 6, 
-                  numberOfCycles = 12, 
-                  totalTrainingPercent = 0.11, 
+optimizeBlackHole(learningRate = 1e-2,
+                  epochsPerIteration = 5, 
+                  numberOfCycles = 10, 
+                  totalTrainingPercent = 0.50, 
                   true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.5]) # Take this initial (p, e) guesss
+                  initial_guess = [10, 0.5]) # Take this initial (p, e) guesssd

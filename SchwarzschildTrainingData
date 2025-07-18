@@ -80,9 +80,9 @@ end
   R = semirectum*M/(1+ecc) # Radius of Orbit
   
   u0 = [0, R, pi/2, 0, -1*E, 0, 0, L]
-  tspan = (0.0, 6e4)
-  timestep = 100
-  t_full = 0:timestep:6e4
+  tspan = (0.0, 2000)
+  timestep = 1
+  t_full = 0:timestep:2000
   p_actual = [M, E, L]
 
   prob = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, p_actual)
@@ -91,8 +91,8 @@ end
   h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
   h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
 
-  skip_initial_points = 0
-  skip_end_points = 0
+  skip_initial_points = 1
+  skip_end_points = 1
 
   h_plus_training = h_plus_full[(skip_initial_points+1):end-skip_end_points]
   h_cross_training = h_cross_full[(skip_initial_points+1):end-skip_end_points]
@@ -105,5 +105,5 @@ end
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-results = create_Schwarzschild_trainingData([100, 0.5])
+# results = create_Schwarzschild_trainingData([100, 0.5])
 # getParameters(solution, 0)
