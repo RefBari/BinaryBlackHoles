@@ -46,6 +46,7 @@ function create_Schwarzschild_trainingData(initial_conditions)
         t, r, θ, φ, p_t, p_r, p_θ, p_ϕ = state_vec
         
         f = (1 - ((2*M)/r))
+        print("\n\nTrue g_tt:", -f^(-1))
         p = [p_t, p_r, p_θ, p_ϕ]
         g = [
               -f^(-1) 0 0 0;
@@ -105,5 +106,5 @@ end
   return [prob, true_sol, h_plus_training, h_cross_training]
 end
 
-# results = create_Schwarzschild_trainingData([100, 0.5])
+results = create_Schwarzschild_trainingData([10, 0.5])
 # getParameters(solution, 0)

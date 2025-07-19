@@ -52,19 +52,39 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 
         function H(state_vec)
             t, r, θ, φ, p_t, p_r, p_θ, p_ϕ = state_vec
+
+            if r < 3.0
+                # Return a "repulsive" Hamiltonian that pushes particle outward
+                return 1e6 * (3.0 - r)^2  # Huge energy penalty near r=3
+            end
+
             NN_correction = NN([r], NN_params, NN_state)[1]
+
+            g_tt_correction = 0.01*NN_correction[1]
+            g_rr_correction = 0.01*NN_correction[2]
+            g_ϕϕ_correction = 0.001*NN_correction[3]
+
+            # println("Initial conditions:")
+            # println("R = $r")
+            # println("E = $E") 
+            # println("L = $L")
+            # println("Energy parameter: E² = $(E^2)")
+            # println("Effective potential at r=$r: $(L^2/(2*r^2) - 1/r)")
+            
+            # print("\nCorrection", g_tt_correction, "\nNewtonian:", -(1-2/r)^(-1))
 
             p = [p_t, p_r, p_θ, p_ϕ]
             g = [
-                -1 * (1 + NN_correction[1]) 0 0 0;
-                0 1 * (1 + NN_correction[2]) 0 0;
-                0 0 0 0;
-                0 0 0 r^(-2)
+                    -(1-2/r)^(-1)+g_tt_correction 0 0 0;
+                    0 (1+2/r)^(-1)+g_rr_correction 0 0;
+                    0 0 0 0;
+                    0 0 0 (r^(-2))*(1+2/r)^(-1)+g_ϕϕ_correction
                 ]
 
             H = (1/2) * p' * g * p
 
             return H # Returns Hamiltonian, whose E.O.M. will be in PROPER time
+            
         end
         
         # Compute gradient using ForwardDiff
@@ -87,7 +107,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     # Neural network setup 
     NN = Chain(Dense(1, 4, tanh), # Learns correction term in terms of 4 parameters: r, p_t, p_r, p_ϕ
             Dense(4, 4, tanh),
-            Dense(4, 2))        # Output 2 corrections, g^tt and g^rr
+            Dense(4, 3))        # Output 2 corrections, g^tt and g^rr
 
     rng = MersenneTwister(222)
     NN_params, NN_state = Lux.setup(rng, NN)
@@ -166,7 +186,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         waveform_loss = sum(abs2, predicted_waveform_plus[1:n_compare] .- h_plus_training[1:n_compare])
         waveform_loss += sum(abs2, predicted_waveform_cross[1:n_compare] .- h_cross_training[1:n_compare])
         
-        loss_value = waveform_loss
+        loss_value = waveform_loss + 0.002 * orbital_loss
         loss_value /= n_compare
 
         println("Training with fraction: ", trainingFraction, ", n_compare: ", n_compare, ", loss: ", loss_value)
@@ -196,14 +216,14 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     lr = learningRate;
 
     # solve the problem
-    num_iters = epochsPerIteration; # number of iterations per partition (i.e., 2 partitions means one run + 2 additional runs = 3 runs * 25 epochs/run = 75 epochs)
+    num_iters = 10; # number of iterations per partition (i.e., 2 partitions means one run + 2 additional runs = 3 runs * 25 epochs/run = 75 epochs)
     opt_result = Optimization.solve(optprob, Optim.BFGS(; initial_stepnorm = lr), callback=callback, maxiters=num_iters)
     θ_final = opt_result.u
 
     NN_params_final = θ_final.NN
     
     newprob = remake(prob_learn, p = θ_final)
-    sol = solve(newprob, Tsit5(), saveat=timestep)
+    sol = solve(newprob, RK4(), saveat=timestep)
     push!(solutions_list, sol)
 
     h_plus_pred = compute_waveform(timestep, sol, 1.0; coorbital=false)[1]
@@ -254,7 +274,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             θ_final_2 = opt_result_2.u;
             push!(p_final_array, θ_final_2)
             newprob_2 = remake(prob_learn, p = θ_final_2)
-            sol_2 = solve(newprob_2, Tsit5(), saveat=timestep)
+            sol_2 = solve(newprob_2, RK4(), saveat=timestep)
             push!(solutions_list, sol_2)
             push!(parameters_list, getParameters(sol_2))
         
@@ -385,9 +405,9 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     return (parameters_list[end][1] - getParameters(true_solution)[1])^2 + (parameters_list[end][2] - getParameters(true_solution)[2])^2
 end
 
-optimizeBlackHole(learningRate = 1e-2,
+optimizeBlackHole(learningRate = 9e-3,
                   epochsPerIteration = 5, 
                   numberOfCycles = 10, 
-                  totalTrainingPercent = 0.50, 
+                  totalTrainingPercent = 0.25, 
                   true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
                   initial_guess = [10, 0.5]) # Take this initial (p, e) guesssd
