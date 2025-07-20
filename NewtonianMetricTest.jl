@@ -41,7 +41,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     # This trainingData returns [prob, true_sol, h_plus_training, h_cross_training]
     trainingData = create_Schwarzschild_trainingData([true_p, true_e]) # Generate Training Data (Gravitational Waveforms)
 
-    timestep = 1 # Timestep for ODE Solver and Optimizer
+    timestep = 100 # Timestep for ODE Solver and Optimizer
 
     true_solution = trainingData[2] # True Solution
 
@@ -53,10 +53,10 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         function H(state_vec)
             t, r, θ, φ, p_t, p_r, p_θ, p_ϕ = state_vec
 
-            if r < 3.0
-                # Return a "repulsive" Hamiltonian that pushes particle outward
-                return 1e6 * (3.0 - r)^2  # Huge energy penalty near r=3
-            end
+            # if r < 3.0
+            #     # Return a "repulsive" Hamiltonian that pushes particle outward
+            #     return 1e6 * (3.0 - r)^2  # Huge energy penalty near r=3
+            # end
 
             NN_correction = NN([r], NN_params, NN_state)[1]
 
@@ -64,28 +64,18 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
             g_rr_correction = 0.01*NN_correction[2]
             g_ϕϕ_correction = 0.001*NN_correction[3]
 
-            # println("Initial conditions:")
-            # println("R = $r")
-            # println("E = $E") 
-            # println("L = $L")
-            # println("Energy parameter: E² = $(E^2)")
-            # println("Effective potential at r=$r: $(L^2/(2*r^2) - 1/r)")
-            
-            # print("\nCorrection", g_tt_correction, "\nNewtonian:", -(1-2/r)^(-1))
-
             p = [p_t, p_r, p_θ, p_ϕ]
             g = [
-                    -(1-2/r)^(-1)+g_tt_correction 0 0 0;
-                    0 (1+2/r)^(-1)+g_rr_correction 0 0;
+                    -(1 - 2/r)^(-1)+g_tt_correction 0 0 0;
+                    0 (1 + 2/r)^(-1)+g_rr_correction 0 0;
                     0 0 0 0;
-                    0 0 0 (r^(-2))*(1+2/r)^(-1)+g_ϕϕ_correction
+                    0 0 0 (r^(-2))*(1 + 2/r)^(-1)+g_ϕϕ_correction
                 ]
 
-            H = (1/2) * p' * g * p
+            H_schwarzschild = (1/2) * p' * g * p
 
-            return H # Returns Hamiltonian, whose E.O.M. will be in PROPER time
-            
-        end
+            return H_schwarzschild # Returns equations of motion in PROPER time
+            end
         
         # Compute gradient using ForwardDiff
         grad_H = ForwardDiff.gradient(H, x)
@@ -97,11 +87,11 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
         # Hamilton's equations: ẋ = J*∇H
         du_dτ = J * grad_H
 
-        dH_dpₜ = grad_H[5]
-        dτ_dt = (dH_dpₜ)^(-1)
-        
+        t_val, r_val = x[1], x[2]
+        f_val = 1 - 2*M/r_val
+        dτ_dt = f_val/E
+
         du .= du_dτ .* dτ_dt # du / dt Returns equations of motion in COORDINATE time
-        du[1] = 1
     end
 
     # Neural network setup 
@@ -133,8 +123,16 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     θ = ComponentVector{precision}(θ);
 
     # Initial State Vector for Particle orbiting Schwarzschild BH
-    u0 = [0, R, pi/2, 0, -1*E, 0, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
-    timeLength = 2000
+    # u0 = [0, R, pi/2, 0, -1*E, 0, 0, L] # u = [t₀, r₀, θ₀, ϕ₀, pₜ₀, pᵣ₀, p_θ₀, p_ϕ₀]
+    # Use relativistic constraint H = -1/2
+    g_tt_factor = 1 - 2/R
+    g_rr_factor = 1 + 2/R
+    angular_term = (L^2 / R^2) * (1/g_rr_factor)
+    p_t_squared = g_tt_factor * (1 + angular_term)  # For H = -1/2
+    p_t_correct = -sqrt(p_t_squared)
+
+    u0 = [0, R, π/2, 0, p_t_correct, 0, 0, L]
+    timeLength = 6e4
     tspan = (0.0, timeLength)
     t = 0:timestep:timeLength
 
@@ -216,7 +214,7 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
     lr = learningRate;
 
     # solve the problem
-    num_iters = 10; # number of iterations per partition (i.e., 2 partitions means one run + 2 additional runs = 3 runs * 25 epochs/run = 75 epochs)
+    num_iters = 3; # number of iterations per partition (i.e., 2 partitions means one run + 2 additional runs = 3 runs * 25 epochs/run = 75 epochs)
     opt_result = Optimization.solve(optprob, Optim.BFGS(; initial_stepnorm = lr), callback=callback, maxiters=num_iters)
     θ_final = opt_result.u
 
@@ -406,8 +404,8 @@ function optimizeBlackHole(; learningRate, epochsPerIteration, numberOfCycles, t
 end
 
 optimizeBlackHole(learningRate = 9e-3,
-                  epochsPerIteration = 5, 
-                  numberOfCycles = 10, 
-                  totalTrainingPercent = 0.25, 
-                  true_parameters = [10, 0.5], # Create training data for these (p_0, e_0) values
-                  initial_guess = [10, 0.5]) # Take this initial (p, e) guesssd
+                  epochsPerIteration = 8, 
+                  numberOfCycles = 6, 
+                  totalTrainingPercent = 0.30, 
+                  true_parameters = [100, 0.5], # Create training data for these (p_0, e_0) values
+                  initial_guess = [100, 0.5]) # Take this initial (p, e) guesssd

@@ -75,20 +75,39 @@ function create_Schwarzschild_trainingData(initial_conditions)
     dτ_dt = f_val/E
 
     du .= du_dτ .* dτ_dt # du / dt Returns equations of motion in COORDINATE time
-end
+  end
 
   M, E, L = pe_2_EL(semirectum, ecc)
   R = semirectum*M/(1+ecc) # Radius of Orbit
-  
+
   u0 = [0, R, pi/2, 0, -1*E, 0, 0, L]
-  tspan = (0.0, 2000)
-  timestep = 1
-  t_full = 0:timestep:2000
+  tspan = (0.0, 6e4)
+  timestep = 100
+  t_full = 0:timestep:6e4
   p_actual = [M, E, L]
 
   prob = ODEProblem(SchwarzschildHamiltonian_GENERIC, u0, tspan, p_actual)
   true_sol = solve(prob, RK4(), saveat = timestep)
 
+  y1 = true_sol[1,:] 
+  y2 = true_sol[2,:] 
+  y3 = true_sol[3,:] 
+  y4 = true_sol[4,:] 
+
+  # Create orbital trajectory plot
+  particle_x = y2 .* cos.(y4)
+  particle_y = y2 .* sin.(y4)
+
+  p2 = plot(particle_x, particle_y,
+                aspect_ratio = 1, linewidth = 2,
+                title = "\n\nPredicted Trajectory",
+                xlabel = L"x",
+                ylabel = L"y",
+                label = "Predicted Trajectory",
+                bottom_margin = 10mm, top_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
+        
+  display(p2)
+  
   h_plus_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[1]
   h_cross_full = compute_waveform(timestep, true_sol, 1.0; coorbital=false)[2]
 
@@ -104,7 +123,8 @@ end
         top_margin = 10mm, bottom_margin = 10mm, left_margin = 10mm, right_margin = 10mm)
   display(p)
   return [prob, true_sol, h_plus_training, h_cross_training]
-end
+  
+  end
 
-results = create_Schwarzschild_trainingData([10, 0.5])
+# results = create_Schwarzschild_trainingData([10, 0.5])
 # getParameters(solution, 0)
